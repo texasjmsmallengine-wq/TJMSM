@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Texas J&M Small Engine Repair — Shop Tracker</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --steel-dark: #1c2024;
@@ -319,6 +320,64 @@
     text-align:center;
     padding: 30px;
   }
+
+  /* ===== Google Sign-in ===== */
+  .signin-screen{
+    max-width: 420px;
+    margin: 60px auto;
+    background: var(--panel);
+    border-radius: 3px;
+    border-top: 5px solid var(--safety-orange);
+    padding: 32px 28px;
+    text-align:center;
+  }
+  .signin-screen .big-title{
+    font-family: var(--font-display);
+    font-size: 19px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    color: var(--steel);
+  }
+  .signin-screen p{
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .google-btn{
+    display:inline-flex;
+    align-items:center;
+    gap: 10px;
+    background: #fff;
+    border: 1.5px solid #d8d3c4;
+    border-radius: 3px;
+    padding: 10px 20px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    color: #3d454c;
+    cursor:pointer;
+  }
+  .google-btn:hover{ border-color: var(--safety-orange); }
+  .sync-bar{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap: 10px;
+    max-width: 1200px;
+    margin: 10px auto 0;
+    padding: 0 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #b8c0c6;
+  }
+  .sync-dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--ok-green);
+    display:inline-block;
+  }
+  .sync-dot.syncing{ background: var(--caution-yellow); }
+  .sync-dot.error{ background: var(--safety-orange); }
 </style>
 </head>
 <body>
@@ -352,7 +411,20 @@
   </div>
 </div>
 
-<div class="main-wrap" id="mainWrap">
+<div class="sync-bar" id="syncBar" style="display:none;">
+  <span class="sync-dot" id="syncDot"></span>
+  <span id="syncStatusText">Not signed in</span>
+  <button class="btn btn-ghost btn-small" onclick="manualSync()">Sync Now</button>
+  <button class="btn btn-ghost btn-small" onclick="signOut()">Sign Out</button>
+</div>
+
+<div id="signinScreen" class="signin-screen">
+  <div class="big-title">Sign In to Load Shop Data</div>
+  <p>This tracker stores all customer and equipment data in Google Drive so it stays in sync across every computer. Sign in with your shop Google account to continue.</p>
+  <button class="google-btn" onclick="signIn()">Sign in with Google</button>
+</div>
+
+<div class="main-wrap" id="mainWrap" style="display:none;">
   <div class="loading-note">Loading shop data...</div>
 </div>
 
@@ -433,12 +505,21 @@ const EQUIPMENT_TYPES = [
   "Sprayer (Backpack/Pull-Behind)","Golf Cart","Other"
 ];
 
-const STORAGE_KEY = "jm-shop-data";
+const CLIENT_ID = "703527848486-lanjs0mf21se7e7ih7qheopjnaspu90a.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DATA_FILE_NAME = "jm-shop-tracker-data.json";
+
 let DATA = { customers: [], equipment: [] };
 let selectedCustomerId = null;
 let equipFilterType = "";
 let equipFilterStatus = "";
 let equipSearchTerm = "";
+
+let tokenClient = null;
+let accessToken = null;
+let driveFileId = null;
+let refreshTimer = null;
+let isModalOpen = false;
 
 function uid(prefix){ return prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); }
 
@@ -449,30 +530,143 @@ function showToast(msg){
   setTimeout(()=> t.classList.remove('show'), 2200);
 }
 
-async function loadData(){
+function setSyncStatus(state, text){
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncStatusText');
+  dot.className = 'sync-dot' + (state ? ' ' + state : '');
+  label.textContent = text;
+}
+
+/* ===== Google Auth ===== */
+function initGoogleAuth(){
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: handleTokenResponse
+  });
+}
+
+function signIn(){
+  if(!tokenClient){ showToast("Google sign-in still loading, try again in a moment"); return; }
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function signOut(){
+  if(accessToken){
+    google.accounts.oauth2.revoke(accessToken, ()=>{});
+  }
+  accessToken = null;
+  driveFileId = null;
+  if(refreshTimer) clearInterval(refreshTimer);
+  document.getElementById('signinScreen').style.display = 'block';
+  document.getElementById('mainWrap').style.display = 'none';
+  setSyncStatus('', 'Not signed in');
+}
+
+async function handleTokenResponse(resp){
+  if(resp.error){
+    showToast("Sign-in failed — please try again");
+    return;
+  }
+  accessToken = resp.access_token;
+  document.getElementById('signinScreen').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'grid';
+  document.getElementById('syncBar').style.display = 'flex';
+  setSyncStatus('syncing', 'Connecting to Drive...');
+  await findOrCreateDriveFile();
+  await loadFromDrive();
+  if(refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(()=>{ if(!isModalOpen) loadFromDrive(true); }, 20000);
+}
+
+async function driveFetch(url, options={}){
+  options.headers = Object.assign({}, options.headers, { 'Authorization': 'Bearer ' + accessToken });
+  const res = await fetch(url, options);
+  if(res.status === 401){
+    // token expired — ask for a fresh one silently, then let caller retry
+    await new Promise(resolve=>{
+      tokenClient.callback = (r)=>{ accessToken = r.access_token; resolve(); };
+      tokenClient.requestAccessToken({ prompt: '' });
+    });
+    tokenClient.callback = handleTokenResponse;
+    throw new Error('token-refreshed-retry');
+  }
+  return res;
+}
+
+async function findOrCreateDriveFile(){
   try{
-    const result = await window.storage.get(STORAGE_KEY, false);
-    if(result && result.value){
-      DATA = JSON.parse(result.value);
-      if(!DATA.customers) DATA.customers = [];
-      if(!DATA.equipment) DATA.equipment = [];
+    const q = encodeURIComponent(`name='${DATA_FILE_NAME}' and trashed=false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`, {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const json = await res.json();
+    if(json.files && json.files.length > 0){
+      driveFileId = json.files[0].id;
+    } else {
+      driveFileId = await createDriveFile();
     }
   }catch(e){
-    DATA = { customers: [], equipment: [] };
+    setSyncStatus('error', 'Could not reach Drive');
   }
-  render();
 }
 
-async function saveData(){
+async function createDriveFile(){
+  const boundary = 'jmshop_boundary_' + Date.now();
+  const metadata = { name: DATA_FILE_NAME, mimeType: 'application/json' };
+  const initialContent = JSON.stringify({ customers: [], equipment: [] });
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${initialContent}\r\n--${boundary}--`;
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + accessToken,
+      'Content-Type': `multipart/related; boundary=${boundary}`
+    },
+    body
+  });
+  const json = await res.json();
+  return json.id;
+}
+
+async function loadFromDrive(silent){
+  if(!driveFileId) return;
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
+    if(!silent) setSyncStatus('syncing', 'Loading...');
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+    const text = await res.text();
+    const parsed = JSON.parse(text || '{}');
+    DATA = { customers: parsed.customers || [], equipment: parsed.equipment || [] };
+    setSyncStatus('', 'Synced ' + new Date().toLocaleTimeString());
+    render();
   }catch(e){
-    showToast("Save failed — try again");
+    if(e.message === 'token-refreshed-retry'){ return loadFromDrive(silent); }
+    setSyncStatus('error', 'Sync error — retrying next cycle');
   }
 }
 
-function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+async function saveToDrive(){
+  if(!driveFileId){ showToast("Not connected to Drive yet"); return; }
+  try{
+    setSyncStatus('syncing', 'Saving...');
+    await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(DATA)
+    });
+    setSyncStatus('', 'Synced ' + new Date().toLocaleTimeString());
+  }catch(e){
+    if(e.message === 'token-refreshed-retry'){ return saveToDrive(); }
+    setSyncStatus('error', 'Save failed — will retry');
+    showToast("Save failed — check your connection");
+  }
+}
+
+function manualSync(){ loadFromDrive(); }
+
+function openModal(id){ document.getElementById(id).classList.add('open'); isModalOpen = true; }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); isModalOpen = false; }
 
 /* ===== Customer CRUD ===== */
 function openAddCustomer(){
@@ -510,7 +704,7 @@ async function saveCustomer(){
     DATA.customers.push({ id: newId, name, phone, address });
     selectedCustomerId = newId;
   }
-  await saveData();
+  await saveToDrive();
   closeModal('customerModalOverlay');
   render();
   showToast("Customer saved");
@@ -524,7 +718,7 @@ async function deleteCustomer(id){
   DATA.customers = DATA.customers.filter(x=>x.id!==id);
   DATA.equipment = DATA.equipment.filter(x=>x.customerId!==id);
   if(selectedCustomerId===id) selectedCustomerId = null;
-  await saveData();
+  await saveToDrive();
   render();
   showToast("Customer deleted");
 }
@@ -590,7 +784,7 @@ async function saveEquipment(){
   } else {
     DATA.equipment.push({ id: uid('equip'), customerId, type, year, make, model, serial, dateIn, dateOut, status, notes });
   }
-  await saveData();
+  await saveToDrive();
   closeModal('equipModalOverlay');
   render();
   showToast("Equipment saved");
@@ -599,7 +793,7 @@ async function saveEquipment(){
 async function deleteEquipment(id){
   if(!confirm("Delete this equipment record?")) return;
   DATA.equipment = DATA.equipment.filter(x=>x.id!==id);
-  await saveData();
+  await saveToDrive();
   render();
   showToast("Equipment deleted");
 }
@@ -782,7 +976,15 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
-loadData();
+window.addEventListener('load', ()=>{
+  // google script is deferred; small poll to make sure it's ready
+  const waitForGoogle = setInterval(()=>{
+    if(window.google && google.accounts && google.accounts.oauth2){
+      clearInterval(waitForGoogle);
+      initGoogleAuth();
+    }
+  }, 100);
+});
 </script>
 </body>
 </html>
