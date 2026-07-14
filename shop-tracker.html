@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Texas J&M Small Engine Repair — Shop Tracker</title>
+<style>
+  :root{
+    --steel-dark: #1c2024;
+    --steel: #2b3136;
+    --steel-light: #3d454c;
+    --panel: #f3f1ea;
+    --panel-line: #d8d3c4;
+    --safety-orange: #d6541a;
+    --safety-orange-dim: #b84614;
+    --caution-yellow: #dba421;
+    --ink: #23201b;
+    --ink-soft: #5c5748;
+    --ok-green: #4a7c3f;
+    --font-display: 'Oswald', 'Arial Narrow', sans-serif;
+    --font-body: 'Inter', -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family: var(--font-body);
+    background: var(--steel-dark);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ===== Header ===== */
+  .shop-header{
+    background: repeating-linear-gradient(135deg, var(--steel) 0 18px, var(--steel-light) 18px 36px);
+    border-bottom: 6px solid var(--safety-orange);
+    padding: 22px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .shop-title{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: 0.5px;
+    color: #f3f1ea;
+    text-transform: uppercase;
+    display:flex;
+    align-items:baseline;
+    gap: 10px;
+  }
+  .shop-title .amp{ color: var(--caution-yellow); }
+  .shop-sub{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #b8c0c6;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .header-stats{
+    display:flex;
+    gap: 18px;
+  }
+  .stat-block{
+    text-align:center;
+    padding: 6px 16px;
+    border-left: 2px solid var(--safety-orange);
+  }
+  .stat-num{
+    font-family: var(--font-display);
+    font-size: 26px;
+    color: var(--caution-yellow);
+    font-weight: 700;
+    line-height:1;
+  }
+  .stat-label{
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #b8c0c6;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ===== Layout ===== */
+  .main-wrap{
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    display:grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px){
+    .main-wrap{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 3px;
+  }
+  .panel-head{
+    background: var(--steel);
+    color: #f3f1ea;
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+  }
+  .panel-body{ padding: 14px; }
+
+  /* ===== Forms ===== */
+  label{
+    display:block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--ink-soft);
+    margin: 10px 0 3px;
+  }
+  input, select, textarea{
+    width:100%;
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1.5px solid var(--panel-line);
+    border-radius: 2px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{
+    outline: none;
+    border-color: var(--safety-orange);
+  }
+  textarea{ resize: vertical; min-height: 50px; }
+
+  .btn{
+    font-family: var(--font-display);
+    font-weight:600;
+    font-size: 13px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 2px;
+    cursor:pointer;
+    transition: filter 0.15s ease, transform 0.05s ease;
+  }
+  .btn:active{ transform: translateY(1px); }
+  .btn-primary{ background: var(--safety-orange); color: #fff; }
+  .btn-primary:hover{ filter: brightness(1.08); }
+  .btn-ghost{ background: transparent; color: var(--steel); border: 1.5px solid var(--steel-light); }
+  .btn-ghost:hover{ background: var(--steel); color:#fff; }
+  .btn-small{ font-size: 11px; padding: 6px 10px; }
+  .btn-danger{ background: transparent; color: var(--safety-orange-dim); border: 1.5px solid var(--safety-orange-dim); }
+  .btn-danger:hover{ background: var(--safety-orange-dim); color:#fff; }
+  .btn-block{ width:100%; margin-top: 12px; }
+
+  /* ===== Customer list ===== */
+  .search-box{ margin-bottom: 12px; }
+  .customer-row{
+    padding: 10px 12px;
+    border: 1.5px solid var(--panel-line);
+    border-radius: 2px;
+    margin-bottom: 8px;
+    cursor:pointer;
+    background: #fff;
+    transition: border-color 0.12s ease;
+  }
+  .customer-row:hover{ border-color: var(--safety-orange); }
+  .customer-row.active{
+    border-color: var(--safety-orange);
+    background: #fdf2ec;
+  }
+  .customer-name{ font-weight:600; font-size: 14.5px; }
+  .customer-meta{ font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .customer-count{
+    display:inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: var(--steel);
+    color: var(--caution-yellow);
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-top: 4px;
+  }
+  .empty-note{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align:center;
+    padding: 20px 10px;
+  }
+
+  /* ===== Equipment table ===== */
+  .filter-bar{
+    display:flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    align-items:center;
+  }
+  .filter-bar select, .filter-bar input{ width:auto; min-width: 140px; }
+
+  table{ width:100%; border-collapse: collapse; font-size: 13px; }
+  thead th{
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+    text-align:left;
+    padding: 6px 8px;
+    border-bottom: 2px solid var(--steel);
+  }
+  tbody td{
+    padding: 9px 8px;
+    border-bottom: 1px solid var(--panel-line);
+    vertical-align: top;
+  }
+  tbody tr:hover{ background: #fbf9f3; }
+
+  .badge{
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 10px;
+    display:inline-block;
+    white-space:nowrap;
+  }
+  .badge-diagnostic{ background:#e3d4e8; color:#6b3a7a; }
+  .badge-inshop{ background:#e7e2d3; color: var(--ink-soft); }
+  .badge-waiting{ background:#f4dcc4; color:#8a4d16; }
+  .badge-ready{ background:#dcead4; color: var(--ok-green); }
+  .badge-pickedup{ background:#dfe3e6; color: #566067; }
+
+  .equip-type{ font-weight:600; }
+  .serial-txt{ font-family: var(--font-mono); font-size:12px; }
+
+  .no-customer-selected{
+    text-align:center;
+    padding: 60px 20px;
+    color: var(--ink-soft);
+  }
+  .no-customer-selected .big{
+    font-family: var(--font-display);
+    font-size: 20px;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 8px;
+  }
+
+  /* ===== Modal ===== */
+  .modal-overlay{
+    display:none;
+    position: fixed; inset:0;
+    background: rgba(20,22,24,0.72);
+    align-items:center; justify-content:center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{
+    background: var(--panel);
+    width: 100%; max-width: 480px;
+    max-height: 90vh;
+    overflow-y:auto;
+    border-radius: 3px;
+    border-top: 5px solid var(--safety-orange);
+  }
+  .modal-inner{ padding: 18px 20px 20px; }
+  .modal-title{
+    font-family: var(--font-display);
+    font-size: 17px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .modal-actions{
+    display:flex; gap: 10px; margin-top: 16px;
+  }
+  .row-2{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row-3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  .top-actions{ display:flex; gap:8px; margin-bottom: 10px; }
+
+  .toast{
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--steel-dark);
+    color: #f3f1ea;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 10px 18px;
+    border-radius: 3px;
+    border-left: 4px solid var(--safety-orange);
+    opacity: 0;
+    pointer-events:none;
+    transition: opacity 0.25s ease;
+    z-index: 100;
+  }
+  .toast.show{ opacity: 1; }
+
+  .loading-note{
+    color: #b8c0c6;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align:center;
+    padding: 30px;
+  }
+</style>
+</head>
+<body>
+
+<div class="shop-header">
+  <div>
+    <div class="shop-title">TEXAS J<span class="amp">&amp;</span>M <span style="color:#d6541a">SMALL ENGINE REPAIR</span></div>
+    <div class="shop-sub">Shop Intake &amp; Equipment Tracker</div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-block">
+      <div class="stat-num" id="statCustomers">0</div>
+      <div class="stat-label">Customers</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-num" id="statInShop">0</div>
+      <div class="stat-label">In Shop</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-num" id="statDiagnostic">0</div>
+      <div class="stat-label">Needs Diagnostic</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-num" id="statWaiting">0</div>
+      <div class="stat-label">Waiting on Parts</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-num" id="statReady">0</div>
+      <div class="stat-label">Ready</div>
+    </div>
+  </div>
+</div>
+
+<div class="main-wrap" id="mainWrap">
+  <div class="loading-note">Loading shop data...</div>
+</div>
+
+<!-- Customer Modal -->
+<div class="modal-overlay" id="customerModalOverlay">
+  <div class="modal-box">
+    <div class="modal-inner">
+      <div class="modal-title" id="customerModalTitle">Add Customer</div>
+      <input type="hidden" id="custId">
+      <label>Name</label>
+      <input type="text" id="custName" placeholder="Customer or company name">
+      <label>Phone</label>
+      <input type="text" id="custPhone" placeholder="(432) 555-0123">
+      <label>Address</label>
+      <textarea id="custAddress" placeholder="Street, city, state, zip"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="saveCustomer()">Save Customer</button>
+        <button class="btn btn-ghost" onclick="closeModal('customerModalOverlay')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Equipment Modal -->
+<div class="modal-overlay" id="equipModalOverlay">
+  <div class="modal-box">
+    <div class="modal-inner">
+      <div class="modal-title" id="equipModalTitle">Add Equipment</div>
+      <input type="hidden" id="equipId">
+      <input type="hidden" id="equipCustId">
+
+      <label>Equipment Type</label>
+      <select id="equipType"></select>
+
+      <div class="row-3">
+        <div><label>Year</label><input type="text" id="equipYear" placeholder="2019"></div>
+        <div><label>Make</label><input type="text" id="equipMake" placeholder="Honda"></div>
+        <div><label>Model</label><input type="text" id="equipModel" placeholder="GX160"></div>
+      </div>
+
+      <label>Serial Number</label>
+      <input type="text" id="equipSerial" placeholder="Serial / unit number">
+
+      <div class="row-2">
+        <div><label>Date In</label><input type="date" id="equipDateIn"></div>
+        <div><label>Date Out</label><input type="date" id="equipDateOut"></div>
+      </div>
+
+      <label>Status</label>
+      <select id="equipStatus">
+        <option value="Needs Diagnostic">Needs Diagnostic</option>
+        <option value="In Shop">In Shop</option>
+        <option value="Waiting on Parts">Waiting on Parts</option>
+        <option value="Ready for Pickup">Ready for Pickup</option>
+        <option value="Picked Up">Picked Up</option>
+      </select>
+
+      <label>Notes / Repair Description</label>
+      <textarea id="equipNotes" placeholder="Reported issue, repair performed, parts used..."></textarea>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="saveEquipment()">Save Equipment</button>
+        <button class="btn btn-ghost" onclick="closeModal('equipModalOverlay')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const EQUIPMENT_TYPES = [
+  "String Trimmer","Push Mower","Self-Propelled Mower","Riding Mower / Lawn Tractor",
+  "Zero-Turn Mower","Pressure Washer","Generator","Air Compressor","Water Pump",
+  "Chain Saw","Leaf Blower (Handheld)","Leaf Blower (Backpack)","Hedge Trimmer",
+  "Tiller / Cultivator","Log Splitter","Snow Blower","Go-Kart / Mini-Bike",
+  "ATV / UTV","Edger","Auger / Post-Hole Digger","Wood Chipper",
+  "Sprayer (Backpack/Pull-Behind)","Golf Cart","Other"
+];
+
+const STORAGE_KEY = "jm-shop-data";
+let DATA = { customers: [], equipment: [] };
+let selectedCustomerId = null;
+let equipFilterType = "";
+let equipFilterStatus = "";
+let equipSearchTerm = "";
+
+function uid(prefix){ return prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+async function loadData(){
+  try{
+    const result = await window.storage.get(STORAGE_KEY, false);
+    if(result && result.value){
+      DATA = JSON.parse(result.value);
+      if(!DATA.customers) DATA.customers = [];
+      if(!DATA.equipment) DATA.equipment = [];
+    }
+  }catch(e){
+    DATA = { customers: [], equipment: [] };
+  }
+  render();
+}
+
+async function saveData(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
+  }catch(e){
+    showToast("Save failed — try again");
+  }
+}
+
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+/* ===== Customer CRUD ===== */
+function openAddCustomer(){
+  document.getElementById('customerModalTitle').textContent = "Add Customer";
+  document.getElementById('custId').value = "";
+  document.getElementById('custName').value = "";
+  document.getElementById('custPhone').value = "";
+  document.getElementById('custAddress').value = "";
+  openModal('customerModalOverlay');
+}
+
+function openEditCustomer(id){
+  const c = DATA.customers.find(x=>x.id===id);
+  if(!c) return;
+  document.getElementById('customerModalTitle').textContent = "Edit Customer";
+  document.getElementById('custId').value = c.id;
+  document.getElementById('custName').value = c.name;
+  document.getElementById('custPhone').value = c.phone;
+  document.getElementById('custAddress').value = c.address;
+  openModal('customerModalOverlay');
+}
+
+async function saveCustomer(){
+  const name = document.getElementById('custName').value.trim();
+  if(!name){ showToast("Customer name is required"); return; }
+  const id = document.getElementById('custId').value;
+  const phone = document.getElementById('custPhone').value.trim();
+  const address = document.getElementById('custAddress').value.trim();
+
+  if(id){
+    const c = DATA.customers.find(x=>x.id===id);
+    c.name = name; c.phone = phone; c.address = address;
+  } else {
+    const newId = uid('cust');
+    DATA.customers.push({ id: newId, name, phone, address });
+    selectedCustomerId = newId;
+  }
+  await saveData();
+  closeModal('customerModalOverlay');
+  render();
+  showToast("Customer saved");
+}
+
+async function deleteCustomer(id){
+  const c = DATA.customers.find(x=>x.id===id);
+  if(!c) return;
+  const equipCount = DATA.equipment.filter(e=>e.customerId===id).length;
+  if(!confirm(`Delete ${c.name}? This will also delete ${equipCount} equipment record(s).`)) return;
+  DATA.customers = DATA.customers.filter(x=>x.id!==id);
+  DATA.equipment = DATA.equipment.filter(x=>x.customerId!==id);
+  if(selectedCustomerId===id) selectedCustomerId = null;
+  await saveData();
+  render();
+  showToast("Customer deleted");
+}
+
+/* ===== Equipment CRUD ===== */
+function populateTypeSelect(){
+  const sel = document.getElementById('equipType');
+  sel.innerHTML = EQUIPMENT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('');
+}
+
+function openAddEquipment(customerId){
+  populateTypeSelect();
+  document.getElementById('equipModalTitle').textContent = "Add Equipment";
+  document.getElementById('equipId').value = "";
+  document.getElementById('equipCustId').value = customerId;
+  document.getElementById('equipType').value = EQUIPMENT_TYPES[0];
+  document.getElementById('equipYear').value = "";
+  document.getElementById('equipMake').value = "";
+  document.getElementById('equipModel').value = "";
+  document.getElementById('equipSerial').value = "";
+  document.getElementById('equipDateIn').value = new Date().toISOString().slice(0,10);
+  document.getElementById('equipDateOut').value = "";
+  document.getElementById('equipStatus').value = "Needs Diagnostic";
+  document.getElementById('equipNotes').value = "";
+  openModal('equipModalOverlay');
+}
+
+function openEditEquipment(id){
+  const e = DATA.equipment.find(x=>x.id===id);
+  if(!e) return;
+  populateTypeSelect();
+  document.getElementById('equipModalTitle').textContent = "Edit Equipment";
+  document.getElementById('equipId').value = e.id;
+  document.getElementById('equipCustId').value = e.customerId;
+  document.getElementById('equipType').value = e.type;
+  document.getElementById('equipYear').value = e.year || "";
+  document.getElementById('equipMake').value = e.make || "";
+  document.getElementById('equipModel').value = e.model || "";
+  document.getElementById('equipSerial').value = e.serial || "";
+  document.getElementById('equipDateIn').value = e.dateIn || "";
+  document.getElementById('equipDateOut').value = e.dateOut || "";
+  document.getElementById('equipStatus').value = e.status || "In Shop";
+  document.getElementById('equipNotes').value = e.notes || "";
+  openModal('equipModalOverlay');
+}
+
+async function saveEquipment(){
+  const customerId = document.getElementById('equipCustId').value;
+  const type = document.getElementById('equipType').value;
+  const year = document.getElementById('equipYear').value.trim();
+  const make = document.getElementById('equipMake').value.trim();
+  const model = document.getElementById('equipModel').value.trim();
+  const serial = document.getElementById('equipSerial').value.trim();
+  const dateIn = document.getElementById('equipDateIn').value;
+  const dateOut = document.getElementById('equipDateOut').value;
+  const status = document.getElementById('equipStatus').value;
+  const notes = document.getElementById('equipNotes').value.trim();
+  const id = document.getElementById('equipId').value;
+
+  if(id){
+    const e = DATA.equipment.find(x=>x.id===id);
+    Object.assign(e, { type, year, make, model, serial, dateIn, dateOut, status, notes });
+  } else {
+    DATA.equipment.push({ id: uid('equip'), customerId, type, year, make, model, serial, dateIn, dateOut, status, notes });
+  }
+  await saveData();
+  closeModal('equipModalOverlay');
+  render();
+  showToast("Equipment saved");
+}
+
+async function deleteEquipment(id){
+  if(!confirm("Delete this equipment record?")) return;
+  DATA.equipment = DATA.equipment.filter(x=>x.id!==id);
+  await saveData();
+  render();
+  showToast("Equipment deleted");
+}
+
+function selectCustomer(id){
+  selectedCustomerId = id;
+  equipFilterType = ""; equipFilterStatus = ""; equipSearchTerm = "";
+  render();
+}
+
+function badgeClass(status){
+  if(status==="Needs Diagnostic") return "badge-diagnostic";
+  if(status==="In Shop") return "badge-inshop";
+  if(status==="Waiting on Parts") return "badge-waiting";
+  if(status==="Ready for Pickup") return "badge-ready";
+  return "badge-pickedup";
+}
+
+function exportCSV(){
+  let rows = [["Customer","Phone","Address","Equipment Type","Year","Make","Model","Serial","Date In","Date Out","Status","Notes"]];
+  DATA.equipment.forEach(e=>{
+    const c = DATA.customers.find(x=>x.id===e.customerId) || {name:"",phone:"",address:""};
+    rows.push([c.name,c.phone,c.address,e.type,e.year,e.make,e.model,e.serial,e.dateIn,e.dateOut,e.status,e.notes]);
+  });
+  const csv = rows.map(r=>r.map(v=>{
+    const s = (v===undefined||v===null) ? "" : String(v);
+    return '"' + s.replace(/"/g,'""') + '"';
+  }).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = "jm_shop_equipment.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function render(){
+  // stats
+  document.getElementById('statCustomers').textContent = DATA.customers.length;
+  document.getElementById('statInShop').textContent = DATA.equipment.filter(e=>e.status==="In Shop").length;
+  document.getElementById('statDiagnostic').textContent = DATA.equipment.filter(e=>e.status==="Needs Diagnostic").length;
+  document.getElementById('statWaiting').textContent = DATA.equipment.filter(e=>e.status==="Waiting on Parts").length;
+  document.getElementById('statReady').textContent = DATA.equipment.filter(e=>e.status==="Ready for Pickup").length;
+
+  const wrap = document.getElementById('mainWrap');
+
+  const searchVal = document.getElementById('customerSearchInput') ? document.getElementById('customerSearchInput').value : "";
+
+  const filteredCustomers = DATA.customers
+    .filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
+    .sort((a,b)=> a.name.localeCompare(b.name));
+
+  let customerListHtml = filteredCustomers.map(c=>{
+    const count = DATA.equipment.filter(e=>e.customerId===c.id).length;
+    return `
+      <div class="customer-row ${c.id===selectedCustomerId?'active':''}" onclick="selectCustomer('${c.id}')">
+        <div class="customer-name">${escapeHtml(c.name)}</div>
+        <div class="customer-meta">${escapeHtml(c.phone||'No phone on file')}</div>
+        <div class="customer-count">${count} item${count===1?'':'s'}</div>
+      </div>`;
+  }).join('');
+
+  if(filteredCustomers.length===0){
+    customerListHtml = `<div class="empty-note">${DATA.customers.length===0 ? "No customers yet. Add your first one above." : "No matches."}</div>`;
+  }
+
+  let rightPanelHtml = "";
+  const cust = DATA.customers.find(c=>c.id===selectedCustomerId);
+
+  if(!cust){
+    rightPanelHtml = `
+      <div class="panel">
+        <div class="panel-head">Equipment</div>
+        <div class="panel-body">
+          <div class="no-customer-selected">
+            <div class="big">Select a Customer</div>
+            <div>Choose a customer on the left to view or add their equipment.</div>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    let equip = DATA.equipment.filter(e=>e.customerId===cust.id);
+    if(equipFilterType) equip = equip.filter(e=>e.type===equipFilterType);
+    if(equipFilterStatus) equip = equip.filter(e=>e.status===equipFilterStatus);
+    if(equipSearchTerm){
+      const t = equipSearchTerm.toLowerCase();
+      equip = equip.filter(e => (e.serial||"").toLowerCase().includes(t) || (e.make||"").toLowerCase().includes(t) || (e.model||"").toLowerCase().includes(t));
+    }
+    equip.sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""));
+
+    const rowsHtml = equip.map(e=>`
+      <tr>
+        <td><span class="equip-type">${escapeHtml(e.type)}</span></td>
+        <td>${escapeHtml(e.year||'—')} ${escapeHtml(e.make||'')}<br>${escapeHtml(e.model||'')}</td>
+        <td class="serial-txt">${escapeHtml(e.serial||'—')}</td>
+        <td>${e.dateIn ? escapeHtml(e.dateIn) : '—'}<br><span style="color:var(--ink-soft)">${e.dateOut ? 'Out: '+escapeHtml(e.dateOut) : ''}</span></td>
+        <td><span class="badge ${badgeClass(e.status)}">${escapeHtml(e.status)}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-small" onclick="openEditEquipment('${e.id}')">Edit</button>
+          <button class="btn btn-danger btn-small" onclick="deleteEquipment('${e.id}')">Del</button>
+        </td>
+      </tr>`).join('');
+
+    const typeOptionsHtml = EQUIPMENT_TYPES.map(t=>`<option value="${t}" ${equipFilterType===t?'selected':''}>${t}</option>`).join('');
+
+    rightPanelHtml = `
+      <div class="panel">
+        <div class="panel-head">
+          <span>${escapeHtml(cust.name)} — Equipment</span>
+          <div>
+            <button class="btn btn-ghost btn-small" onclick="openEditCustomer('${cust.id}')" style="color:#f3f1ea;border-color:#f3f1ea55;">Edit Customer</button>
+            <button class="btn btn-danger btn-small" onclick="deleteCustomer('${cust.id}')" style="color:#e0a56f;border-color:#e0a56f88;">Delete</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="customer-meta" style="margin-bottom:12px;font-size:12.5px;">
+            ${escapeHtml(cust.phone||'No phone')} ${cust.address ? ' • '+escapeHtml(cust.address) : ''}
+          </div>
+
+          <div class="top-actions">
+            <button class="btn btn-primary" onclick="openAddEquipment('${cust.id}')">+ Add Equipment</button>
+            <button class="btn btn-ghost" onclick="exportCSV()">Export All to CSV</button>
+          </div>
+
+          <div class="filter-bar">
+            <select onchange="equipFilterType=this.value; render();">
+              <option value="">All Types</option>
+              ${typeOptionsHtml}
+            </select>
+            <select onchange="equipFilterStatus=this.value; render();">
+              <option value="">All Statuses</option>
+              <option value="Needs Diagnostic" ${equipFilterStatus==="Needs Diagnostic"?'selected':''}>Needs Diagnostic</option>
+              <option value="In Shop" ${equipFilterStatus==="In Shop"?'selected':''}>In Shop</option>
+              <option value="Waiting on Parts" ${equipFilterStatus==="Waiting on Parts"?'selected':''}>Waiting on Parts</option>
+              <option value="Ready for Pickup" ${equipFilterStatus==="Ready for Pickup"?'selected':''}>Ready for Pickup</option>
+              <option value="Picked Up" ${equipFilterStatus==="Picked Up"?'selected':''}>Picked Up</option>
+            </select>
+            <input type="text" placeholder="Search serial / make / model" value="${escapeHtml(equipSearchTerm)}" oninput="equipSearchTerm=this.value; render();">
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Dates</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">No equipment on file for this customer yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <span>Customers</span>
+        <button class="btn btn-primary btn-small" onclick="openAddCustomer()">+ Add</button>
+      </div>
+      <div class="panel-body">
+        <div class="search-box">
+          <input type="text" id="customerSearchInput" placeholder="Search customers..." value="${escapeHtml(searchVal)}" oninput="render()">
+        </div>
+        ${customerListHtml}
+      </div>
+    </div>
+    ${rightPanelHtml}
+  `;
+
+  // restore focus to search box cursor position if typing
+  const si = document.getElementById('customerSearchInput');
+  if(si && document.activeElement !== si && searchVal){
+    // no-op, avoid stealing focus unexpectedly
+  }
+}
+
+function escapeHtml(str){
+  if(str===undefined || str===null) return "";
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+loadData();
+</script>
+</body>
+</html>
