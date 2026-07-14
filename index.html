@@ -70,7 +70,12 @@
     text-align:center;
     padding: 6px 16px;
     border-left: 2px solid var(--safety-orange);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.12s ease;
   }
+  .stat-block:hover{ background: rgba(255,255,255,0.08); }
+  .stat-block.stat-active{ background: rgba(214,84,26,0.25); }
   .stat-num{
     font-family: var(--font-display);
     font-size: 26px;
@@ -388,23 +393,23 @@
     <div class="shop-sub">Shop Intake &amp; Equipment Tracker</div>
   </div>
   <div class="header-stats">
-    <div class="stat-block">
+    <div class="stat-block" data-status="" onclick="showStatFilter(null)">
       <div class="stat-num" id="statCustomers">0</div>
       <div class="stat-label">Customers</div>
     </div>
-    <div class="stat-block">
+    <div class="stat-block" data-status="In Shop" onclick="showStatFilter('In Shop')">
       <div class="stat-num" id="statInShop">0</div>
       <div class="stat-label">In Shop</div>
     </div>
-    <div class="stat-block">
+    <div class="stat-block" data-status="Needs Diagnostic" onclick="showStatFilter('Needs Diagnostic')">
       <div class="stat-num" id="statDiagnostic">0</div>
       <div class="stat-label">Needs Diagnostic</div>
     </div>
-    <div class="stat-block">
+    <div class="stat-block" data-status="Waiting on Parts" onclick="showStatFilter('Waiting on Parts')">
       <div class="stat-num" id="statWaiting">0</div>
       <div class="stat-label">Waiting on Parts</div>
     </div>
-    <div class="stat-block">
+    <div class="stat-block" data-status="Ready for Pickup" onclick="showStatFilter('Ready for Pickup')">
       <div class="stat-num" id="statReady">0</div>
       <div class="stat-label">Ready</div>
     </div>
@@ -511,6 +516,7 @@ const DATA_FILE_NAME = "jm-shop-tracker-data.json";
 
 let DATA = { customers: [], equipment: [] };
 let selectedCustomerId = null;
+let activeStatFilter = null;
 let equipFilterType = "";
 let equipFilterStatus = "";
 let equipSearchTerm = "";
@@ -800,7 +806,14 @@ async function deleteEquipment(id){
 
 function selectCustomer(id){
   selectedCustomerId = id;
+  activeStatFilter = null;
   equipFilterType = ""; equipFilterStatus = ""; equipSearchTerm = "";
+  render();
+}
+
+function showStatFilter(status){
+  activeStatFilter = status;
+  selectedCustomerId = null;
   render();
 }
 
@@ -838,6 +851,11 @@ function render(){
   document.getElementById('statWaiting').textContent = DATA.equipment.filter(e=>e.status==="Waiting on Parts").length;
   document.getElementById('statReady').textContent = DATA.equipment.filter(e=>e.status==="Ready for Pickup").length;
 
+  document.querySelectorAll('.stat-block').forEach(el=>{
+    const isActive = (activeStatFilter===null && el.dataset.status==="") || (el.dataset.status===activeStatFilter);
+    el.classList.toggle('stat-active', !!activeStatFilter && isActive);
+  });
+
   const wrap = document.getElementById('mainWrap');
 
   const searchVal = document.getElementById('customerSearchInput') ? document.getElementById('customerSearchInput').value : "";
@@ -863,7 +881,48 @@ function render(){
   let rightPanelHtml = "";
   const cust = DATA.customers.find(c=>c.id===selectedCustomerId);
 
-  if(!cust){
+  if(activeStatFilter){
+    let equip = DATA.equipment.filter(e=>e.status===activeStatFilter);
+    equip.sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""));
+
+    const rowsHtml = equip.map(e=>{
+      const owner = DATA.customers.find(c=>c.id===e.customerId);
+      return `
+      <tr>
+        <td>
+          <span style="cursor:pointer;text-decoration:underline;" onclick="selectCustomer('${e.customerId}')">${escapeHtml(owner ? owner.name : 'Unknown Customer')}</span>
+        </td>
+        <td><span class="equip-type">${escapeHtml(e.type)}</span></td>
+        <td>${escapeHtml(e.year||'—')} ${escapeHtml(e.make||'')}<br>${escapeHtml(e.model||'')}</td>
+        <td class="serial-txt">${escapeHtml(e.serial||'—')}</td>
+        <td>${e.dateIn ? escapeHtml(e.dateIn) : '—'}</td>
+        <td>
+          <button class="btn btn-ghost btn-small" onclick="openEditEquipment('${e.id}')">Edit</button>
+          <button class="btn btn-danger btn-small" onclick="deleteEquipment('${e.id}')">Del</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    rightPanelHtml = `
+      <div class="panel">
+        <div class="panel-head">
+          <span>All Equipment — ${escapeHtml(activeStatFilter)} (${equip.length})</span>
+          <button class="btn btn-ghost btn-small" onclick="showStatFilter(null)" style="color:#f3f1ea;border-color:#f3f1ea55;">Clear Filter</button>
+        </div>
+        <div class="panel-body">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th><th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Date In</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Nothing with this status right now.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } else if(!cust){
     rightPanelHtml = `
       <div class="panel">
         <div class="panel-head">Equipment</div>
