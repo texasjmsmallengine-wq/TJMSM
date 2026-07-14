@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -473,26 +474,71 @@
       <label>Serial Number</label>
       <input type="text" id="equipSerial" placeholder="Serial / unit number">
 
-      <div class="row-2">
-        <div><label>Date In</label><input type="date" id="equipDateIn"></div>
-        <div><label>Date Out</label><input type="date" id="equipDateOut"></div>
+      <div id="equipFirstVisitWrapper">
+        <div style="border-top:1.5px solid var(--panel-line); margin-top:16px; padding-top:12px;">
+          <div style="font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; color:var(--ink-soft); letter-spacing:0.8px;">Intake Visit</div>
+        </div>
+        <div class="row-2">
+          <div><label>Date In</label><input type="date" id="equipDateIn"></div>
+          <div><label>Date Out</label><input type="date" id="equipDateOut"></div>
+        </div>
+
+        <label>Status</label>
+        <select id="equipStatus">
+          <option value="Needs Diagnostic">Needs Diagnostic</option>
+          <option value="In Shop">In Shop</option>
+          <option value="Waiting on Parts">Waiting on Parts</option>
+          <option value="Ready for Pickup">Ready for Pickup</option>
+          <option value="Picked Up">Picked Up</option>
+        </select>
+
+        <label>Notes / Repair Description</label>
+        <textarea id="equipNotes" placeholder="Reported issue, repair performed, parts used..."></textarea>
       </div>
-
-      <label>Status</label>
-      <select id="equipStatus">
-        <option value="Needs Diagnostic">Needs Diagnostic</option>
-        <option value="In Shop">In Shop</option>
-        <option value="Waiting on Parts">Waiting on Parts</option>
-        <option value="Ready for Pickup">Ready for Pickup</option>
-        <option value="Picked Up">Picked Up</option>
-      </select>
-
-      <label>Notes / Repair Description</label>
-      <textarea id="equipNotes" placeholder="Reported issue, repair performed, parts used..."></textarea>
 
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="saveEquipment()">Save Equipment</button>
         <button class="btn btn-ghost" onclick="closeModal('equipModalOverlay')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Repair History Modal -->
+<div class="modal-overlay" id="historyModalOverlay">
+  <div class="modal-box" style="max-width:600px;">
+    <div class="modal-inner">
+      <div class="modal-title">Repair History</div>
+      <div id="historyEquipHeader" class="customer-meta" style="margin-bottom:14px; font-size:13px;"></div>
+
+      <div style="background:#fff; border:1.5px solid var(--panel-line); border-radius:2px; padding:12px; margin-bottom:16px;">
+        <div style="font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; color:var(--ink-soft); letter-spacing:0.8px; margin-bottom:6px;" id="visitFormTitle">Log New Visit</div>
+        <input type="hidden" id="visitEditId">
+        <div class="row-2">
+          <div><label>Date In</label><input type="date" id="visitDateIn"></div>
+          <div><label>Date Out</label><input type="date" id="visitDateOut"></div>
+        </div>
+        <label>Status</label>
+        <select id="visitStatus">
+          <option value="Needs Diagnostic">Needs Diagnostic</option>
+          <option value="In Shop">In Shop</option>
+          <option value="Waiting on Parts">Waiting on Parts</option>
+          <option value="Ready for Pickup">Ready for Pickup</option>
+          <option value="Picked Up">Picked Up</option>
+        </select>
+        <label>Notes / Repair Description</label>
+        <textarea id="visitNotes" placeholder="Issue reported, diagnosis, fix, parts used..."></textarea>
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-small" onclick="saveVisit()" id="visitSaveBtn">Log Visit</button>
+          <button class="btn btn-ghost btn-small" onclick="cancelVisitEdit()" id="visitCancelBtn" style="display:none;">Cancel Edit</button>
+        </div>
+      </div>
+
+      <div style="font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; color:var(--ink-soft); letter-spacing:0.8px; margin-bottom:6px;">Past Visits</div>
+      <div id="historyList"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('historyModalOverlay')">Close</button>
       </div>
     </div>
   </div>
@@ -528,6 +574,30 @@ let refreshTimer = null;
 let isModalOpen = false;
 
 function uid(prefix){ return prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); }
+
+function migrateEquipmentData(){
+  DATA.equipment.forEach(e=>{
+    if(!e.visits){
+      e.visits = [{
+        id: uid('visit'),
+        dateIn: e.dateIn || "",
+        dateOut: e.dateOut || "",
+        status: e.status || "Needs Diagnostic",
+        notes: e.notes || ""
+      }];
+    }
+  });
+}
+
+function getLastVisit(equip){
+  if(!equip.visits || equip.visits.length===0) return null;
+  return [...equip.visits].sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""))[0];
+}
+
+function recomputeEquipStatus(equip){
+  const last = getLastVisit(equip);
+  equip.status = last ? last.status : "Needs Diagnostic";
+}
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -644,6 +714,7 @@ async function loadFromDrive(silent){
     const text = await res.text();
     const parsed = JSON.parse(text || '{}');
     DATA = { customers: parsed.customers || [], equipment: parsed.equipment || [] };
+    migrateEquipmentData();
     setSyncStatus('', 'Synced ' + new Date().toLocaleTimeString());
     render();
   }catch(e){
@@ -749,6 +820,7 @@ function openAddEquipment(customerId){
   document.getElementById('equipDateOut').value = "";
   document.getElementById('equipStatus').value = "Needs Diagnostic";
   document.getElementById('equipNotes').value = "";
+  document.getElementById('equipFirstVisitWrapper').style.display = "block";
   openModal('equipModalOverlay');
 }
 
@@ -756,7 +828,7 @@ function openEditEquipment(id){
   const e = DATA.equipment.find(x=>x.id===id);
   if(!e) return;
   populateTypeSelect();
-  document.getElementById('equipModalTitle').textContent = "Edit Equipment";
+  document.getElementById('equipModalTitle').textContent = "Edit Equipment Info";
   document.getElementById('equipId').value = e.id;
   document.getElementById('equipCustId').value = e.customerId;
   document.getElementById('equipType').value = e.type;
@@ -764,10 +836,7 @@ function openEditEquipment(id){
   document.getElementById('equipMake').value = e.make || "";
   document.getElementById('equipModel').value = e.model || "";
   document.getElementById('equipSerial').value = e.serial || "";
-  document.getElementById('equipDateIn').value = e.dateIn || "";
-  document.getElementById('equipDateOut').value = e.dateOut || "";
-  document.getElementById('equipStatus').value = e.status || "In Shop";
-  document.getElementById('equipNotes').value = e.notes || "";
+  document.getElementById('equipFirstVisitWrapper').style.display = "none";
   openModal('equipModalOverlay');
 }
 
@@ -778,17 +847,21 @@ async function saveEquipment(){
   const make = document.getElementById('equipMake').value.trim();
   const model = document.getElementById('equipModel').value.trim();
   const serial = document.getElementById('equipSerial').value.trim();
-  const dateIn = document.getElementById('equipDateIn').value;
-  const dateOut = document.getElementById('equipDateOut').value;
-  const status = document.getElementById('equipStatus').value;
-  const notes = document.getElementById('equipNotes').value.trim();
   const id = document.getElementById('equipId').value;
 
   if(id){
     const e = DATA.equipment.find(x=>x.id===id);
-    Object.assign(e, { type, year, make, model, serial, dateIn, dateOut, status, notes });
+    Object.assign(e, { type, year, make, model, serial });
   } else {
-    DATA.equipment.push({ id: uid('equip'), customerId, type, year, make, model, serial, dateIn, dateOut, status, notes });
+    const dateIn = document.getElementById('equipDateIn').value;
+    const dateOut = document.getElementById('equipDateOut').value;
+    const status = document.getElementById('equipStatus').value;
+    const notes = document.getElementById('equipNotes').value.trim();
+    DATA.equipment.push({
+      id: uid('equip'), customerId, type, year, make, model, serial,
+      status,
+      visits: [{ id: uid('visit'), dateIn, dateOut, status, notes }]
+    });
   }
   await saveToDrive();
   closeModal('equipModalOverlay');
@@ -797,11 +870,121 @@ async function saveEquipment(){
 }
 
 async function deleteEquipment(id){
-  if(!confirm("Delete this equipment record?")) return;
+  if(!confirm("Delete this equipment record and its entire repair history?")) return;
   DATA.equipment = DATA.equipment.filter(x=>x.id!==id);
   await saveToDrive();
   render();
   showToast("Equipment deleted");
+}
+
+/* ===== Repair History / Visits ===== */
+let currentHistoryEquipId = null;
+let editingVisitId = null;
+
+function openHistory(equipId){
+  const e = DATA.equipment.find(x=>x.id===equipId);
+  if(!e) return;
+  currentHistoryEquipId = equipId;
+  editingVisitId = null;
+
+  document.getElementById('historyEquipHeader').textContent =
+    `${e.type} — ${e.year||''} ${e.make||''} ${e.model||''}${e.serial ? ' — S/N ' + e.serial : ''}`;
+
+  resetVisitForm(e.status);
+  renderHistoryList();
+  openModal('historyModalOverlay');
+}
+
+function resetVisitForm(defaultStatus){
+  document.getElementById('visitEditId').value = "";
+  document.getElementById('visitDateIn').value = new Date().toISOString().slice(0,10);
+  document.getElementById('visitDateOut').value = "";
+  document.getElementById('visitStatus').value = defaultStatus || "Needs Diagnostic";
+  document.getElementById('visitNotes').value = "";
+  document.getElementById('visitFormTitle').textContent = "Log New Visit";
+  document.getElementById('visitSaveBtn').textContent = "Log Visit";
+  document.getElementById('visitCancelBtn').style.display = "none";
+  editingVisitId = null;
+}
+
+function editVisit(visitId){
+  const e = DATA.equipment.find(x=>x.id===currentHistoryEquipId);
+  if(!e) return;
+  const v = e.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  editingVisitId = visitId;
+  document.getElementById('visitEditId').value = v.id;
+  document.getElementById('visitDateIn').value = v.dateIn || "";
+  document.getElementById('visitDateOut').value = v.dateOut || "";
+  document.getElementById('visitStatus').value = v.status || "Needs Diagnostic";
+  document.getElementById('visitNotes').value = v.notes || "";
+  document.getElementById('visitFormTitle').textContent = "Edit Visit";
+  document.getElementById('visitSaveBtn').textContent = "Update Visit";
+  document.getElementById('visitCancelBtn').style.display = "inline-block";
+}
+
+function cancelVisitEdit(){
+  const e = DATA.equipment.find(x=>x.id===currentHistoryEquipId);
+  resetVisitForm(e ? e.status : null);
+}
+
+async function saveVisit(){
+  const e = DATA.equipment.find(x=>x.id===currentHistoryEquipId);
+  if(!e) return;
+  const dateIn = document.getElementById('visitDateIn').value;
+  const dateOut = document.getElementById('visitDateOut').value;
+  const status = document.getElementById('visitStatus').value;
+  const notes = document.getElementById('visitNotes').value.trim();
+
+  if(editingVisitId){
+    const v = e.visits.find(x=>x.id===editingVisitId);
+    Object.assign(v, { dateIn, dateOut, status, notes });
+  } else {
+    e.visits.push({ id: uid('visit'), dateIn, dateOut, status, notes });
+  }
+  recomputeEquipStatus(e);
+  await saveToDrive();
+  resetVisitForm(e.status);
+  renderHistoryList();
+  render();
+  showToast(editingVisitId ? "Visit updated" : "Visit logged");
+}
+
+async function deleteVisit(visitId){
+  const e = DATA.equipment.find(x=>x.id===currentHistoryEquipId);
+  if(!e) return;
+  if(e.visits.length <= 1){ showToast("Equipment needs at least one visit — delete the equipment instead"); return; }
+  if(!confirm("Delete this visit record?")) return;
+  e.visits = e.visits.filter(x=>x.id!==visitId);
+  recomputeEquipStatus(e);
+  await saveToDrive();
+  resetVisitForm(e.status);
+  renderHistoryList();
+  render();
+  showToast("Visit deleted");
+}
+
+function renderHistoryList(){
+  const e = DATA.equipment.find(x=>x.id===currentHistoryEquipId);
+  const container = document.getElementById('historyList');
+  if(!e){ container.innerHTML = ""; return; }
+  const sorted = [...e.visits].sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""));
+  container.innerHTML = sorted.map(v=>`
+    <div style="background:#fff; border:1.5px solid var(--panel-line); border-radius:2px; padding:10px 12px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <div>
+          <span style="font-family:var(--font-mono); font-size:12px; font-weight:600;">${v.dateIn ? escapeHtml(v.dateIn) : 'No date'}</span>
+          ${v.dateOut ? `<span style="font-family:var(--font-mono); font-size:11px; color:var(--ink-soft);"> → out ${escapeHtml(v.dateOut)}</span>` : ''}
+          <span class="badge ${badgeClass(v.status)}" style="margin-left:8px;">${escapeHtml(v.status)}</span>
+        </div>
+        <div>
+          <button class="btn btn-ghost btn-small" onclick="editVisit('${v.id}')">Edit</button>
+          <button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Del</button>
+        </div>
+      </div>
+      <div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(v.notes || 'No notes recorded.')}</div>
+    </div>
+  `).join('') || '<div class="empty-note">No visits recorded yet.</div>';
 }
 
 function selectCustomer(id){
@@ -826,10 +1009,13 @@ function badgeClass(status){
 }
 
 function exportCSV(){
-  let rows = [["Customer","Phone","Address","Equipment Type","Year","Make","Model","Serial","Date In","Date Out","Status","Notes"]];
+  let rows = [["Customer","Phone","Address","Equipment Type","Year","Make","Model","Serial","Visit Date In","Visit Date Out","Visit Status","Visit Notes"]];
   DATA.equipment.forEach(e=>{
     const c = DATA.customers.find(x=>x.id===e.customerId) || {name:"",phone:"",address:""};
-    rows.push([c.name,c.phone,c.address,e.type,e.year,e.make,e.model,e.serial,e.dateIn,e.dateOut,e.status,e.notes]);
+    const visits = (e.visits && e.visits.length) ? [...e.visits].sort((a,b)=>(a.dateIn||"").localeCompare(b.dateIn||"")) : [{dateIn:"",dateOut:"",status:e.status||"",notes:""}];
+    visits.forEach(v=>{
+      rows.push([c.name,c.phone,c.address,e.type,e.year,e.make,e.model,e.serial,v.dateIn,v.dateOut,v.status,v.notes]);
+    });
   });
   const csv = rows.map(r=>r.map(v=>{
     const s = (v===undefined||v===null) ? "" : String(v);
@@ -883,10 +1069,14 @@ function render(){
 
   if(activeStatFilter){
     let equip = DATA.equipment.filter(e=>e.status===activeStatFilter);
-    equip.sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""));
+    equip.sort((a,b)=> {
+      const la = getLastVisit(a), lb = getLastVisit(b);
+      return ((lb&&lb.dateIn)||"").localeCompare((la&&la.dateIn)||"");
+    });
 
     const rowsHtml = equip.map(e=>{
       const owner = DATA.customers.find(c=>c.id===e.customerId);
+      const last = getLastVisit(e);
       return `
       <tr>
         <td>
@@ -895,8 +1085,9 @@ function render(){
         <td><span class="equip-type">${escapeHtml(e.type)}</span></td>
         <td>${escapeHtml(e.year||'—')} ${escapeHtml(e.make||'')}<br>${escapeHtml(e.model||'')}</td>
         <td class="serial-txt">${escapeHtml(e.serial||'—')}</td>
-        <td>${e.dateIn ? escapeHtml(e.dateIn) : '—'}</td>
+        <td>${last ? escapeHtml(last.dateIn||'—') : '—'} <span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:11px;">(${e.visits.length} visit${e.visits.length===1?'':'s'})</span></td>
         <td>
+          <button class="btn btn-ghost btn-small" onclick="openHistory('${e.id}')">History</button>
           <button class="btn btn-ghost btn-small" onclick="openEditEquipment('${e.id}')">Edit</button>
           <button class="btn btn-danger btn-small" onclick="deleteEquipment('${e.id}')">Del</button>
         </td>
@@ -913,7 +1104,7 @@ function render(){
           <table>
             <thead>
               <tr>
-                <th>Customer</th><th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Date In</th><th></th>
+                <th>Customer</th><th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Last Visit</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -941,20 +1132,27 @@ function render(){
       const t = equipSearchTerm.toLowerCase();
       equip = equip.filter(e => (e.serial||"").toLowerCase().includes(t) || (e.make||"").toLowerCase().includes(t) || (e.model||"").toLowerCase().includes(t));
     }
-    equip.sort((a,b)=> (b.dateIn||"").localeCompare(a.dateIn||""));
+    equip.sort((a,b)=> {
+      const la = getLastVisit(a), lb = getLastVisit(b);
+      return ((lb&&lb.dateIn)||"").localeCompare((la&&la.dateIn)||"");
+    });
 
-    const rowsHtml = equip.map(e=>`
+    const rowsHtml = equip.map(e=>{
+      const last = getLastVisit(e);
+      return `
       <tr>
         <td><span class="equip-type">${escapeHtml(e.type)}</span></td>
         <td>${escapeHtml(e.year||'—')} ${escapeHtml(e.make||'')}<br>${escapeHtml(e.model||'')}</td>
         <td class="serial-txt">${escapeHtml(e.serial||'—')}</td>
-        <td>${e.dateIn ? escapeHtml(e.dateIn) : '—'}<br><span style="color:var(--ink-soft)">${e.dateOut ? 'Out: '+escapeHtml(e.dateOut) : ''}</span></td>
+        <td>${last && last.dateIn ? escapeHtml(last.dateIn) : '—'}<br><span style="color:var(--ink-soft)">${last && last.dateOut ? 'Out: '+escapeHtml(last.dateOut) : ''}</span><br><span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:10.5px;">${e.visits.length} visit${e.visits.length===1?'':'s'}</span></td>
         <td><span class="badge ${badgeClass(e.status)}">${escapeHtml(e.status)}</span></td>
         <td>
+          <button class="btn btn-ghost btn-small" onclick="openHistory('${e.id}')">History</button>
           <button class="btn btn-ghost btn-small" onclick="openEditEquipment('${e.id}')">Edit</button>
           <button class="btn btn-danger btn-small" onclick="deleteEquipment('${e.id}')">Del</button>
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const typeOptionsHtml = EQUIPMENT_TYPES.map(t=>`<option value="${t}" ${equipFilterType===t?'selected':''}>${t}</option>`).join('');
 
@@ -996,7 +1194,7 @@ function render(){
           <table>
             <thead>
               <tr>
-                <th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Dates</th><th>Status</th><th></th>
+                <th>Type</th><th>Year/Make/Model</th><th>Serial</th><th>Last Visit</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
